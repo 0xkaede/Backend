@@ -224,10 +224,8 @@ namespace KaedeBackend.Controllers
             if (profiles is null)
                 throw new BaseException("errors.com.epicgames.modules.profiles.operation_forbidden", $"Unable to find template configuration for profile {profileId}", 10282, "");
 
-            if (profileId != "athena")
-                throw new BaseException("errors.com.epicgames.modules.profiles.invalid_command", $"EquipBattleRoyaleCustomization is not valid on {profileId} profile", 10282, "");
-
             var profileAthena = profiles.AthenaProfile;
+            var profileCommonCore = profiles.CommonCoreProfile;
 
             var memory = GetSeasonData(HttpContext);
 
@@ -238,16 +236,38 @@ namespace KaedeBackend.Controllers
             for (int i = 0; i < body.ItemIds.Count(); i++)
             {
                 var item = body.ItemIds[i];
-
-                profileAthena.Items.FirstOrDefault(x => x.Key == item).Value.Attributes.ItemSeen = true;
-
-                applyProfileChanges.Add(new ItemAttrChanged
+                switch (profileId)
                 {
-                    ChangeType = "itemAttrChanged",
-                    ItemId = item,
-                    AttributeName = "item_seen",
-                    AttributeValue = true
-                });
+                    case "athena":
+                        {
+                            profileAthena.Items.FirstOrDefault(x => x.Key == item).Value.Attributes.ItemSeen = true;
+
+                            applyProfileChanges.Add(new ItemAttrChanged
+                            {
+                                ChangeType = "itemAttrChanged",
+                                ItemId = item,
+                                AttributeName = "item_seen",
+                                AttributeValue = true
+                            });
+                            break;
+                        }
+                    case "common_core":
+                        {
+                            profileCommonCore.Items.FirstOrDefault(x => x.Key == item).Value.Attributes.ItemSeen = true;
+                            applyProfileChanges.Add(new ItemAttrChanged
+                            {
+                                ChangeType = "itemAttrChanged",
+                                ItemId = item,
+                                AttributeName = "item_seen",
+                                AttributeValue = true
+                            });
+                            break;
+                        }
+                        default:
+                        {
+                            throw new BaseException("errors.com.epicgames.modules.profiles.invalid_command", $"EquipBattleRoyaleCustomization is not valid on {profileId} profile", 10282, "");
+                        }
+                }
             }
 
             if (applyProfileChanges.Count > 0)
@@ -319,6 +339,78 @@ namespace KaedeBackend.Controllers
                     AttributeValue = body.ItemFavStatus[i]
                 });
             }
+
+            if (applyProfileChanges.Count > 0)
+            {
+                profileAthena.Revision += 1;
+                profileAthena.CommandRevision += 1;
+                profileAthena.Updated = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ");
+
+                var filter = Builders<ProfilesMongo>.Filter.Eq("accountId", accountId);
+                var update = Builders<ProfilesMongo>.Update.Set("athena", profileAthena);
+                await _mongoService.UpdateFortniteProfile(filter, update);
+            }
+
+            if (rvn != profileRevisionCheck)
+            {
+                applyProfileChanges = new List<object>
+                {
+                    new FullProfileUpdate
+                    {
+                        ChangeType = "fullProfileUpdate",
+                        Profile = profileAthena
+                    }
+                };
+            }
+
+            return new ProfileResponse
+            {
+                ProfileRevision = profileAthena.Revision,
+                ProfileId = profileId,
+                ProfileCommandRevision = profileAthena.CommandRevision,
+                ProfileChanges = applyProfileChanges,
+                ProfileChangesBaseRevisionRevision = BaseRevision,
+                ServerTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ"),
+                ResponseVersion = 1
+            };
+        }
+
+        [HttpPost]
+        [Route("{accountId}/client/SetBattleRoyaleBanner")]
+        public async Task<ActionResult<ProfileResponse>> SetBattleRoyaleBanner([FromQuery] string profileId, [FromQuery] int rvn,
+            [FromBody] SetBattleRoyaleBannerRequest body, string accountId)
+        {
+            var profiles = await _mongoService.GetFortniteProfileById(accountId);
+            if (profiles is null)
+                throw new BaseException("errors.com.epicgames.modules.profiles.operation_forbidden", $"Unable to find template configuration for profile {profileId}", 10282, "");
+
+            if (profileId != "athena")
+                throw new BaseException("errors.com.epicgames.modules.profiles.invalid_command", $"EquipBattleRoyaleCustomization is not valid on {profileId} profile", 10282, "");
+
+            var profileAthena = profiles.AthenaProfile;
+
+            var memory = GetSeasonData(HttpContext);
+
+            var applyProfileChanges = new List<object>();
+            var BaseRevision = profileAthena.Revision;
+            var profileRevisionCheck = (memory.Build >= 12.20) ? profileAthena.CommandRevision : profileAthena.Revision;
+
+            profileAthena.Stats.Attributes.BannerColor = body.HomebaseBannerColorId;
+            profileAthena.Stats.Attributes.BannerIcon = body.HomebaseBannerIconId; //no check in commoncore but idc
+
+            applyProfileChanges.Add(new StatModified
+            {
+                ChangeType = "statModified",
+                Name = $"banner_color",
+                Value = profileAthena.Stats.Attributes.BannerColor
+            });
+
+            applyProfileChanges.Add(new StatModified
+            {
+                ChangeType = "statModified",
+                Name = $"banner_icon",
+                Value = profileAthena.Stats.Attributes.BannerIcon
+            });
 
             if (applyProfileChanges.Count > 0)
             {
