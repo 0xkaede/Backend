@@ -1,18 +1,12 @@
-﻿using Jose;
-using KaedeBackend.Exceptions;
-using KaedeBackend.Exceptions.Common;
+﻿using KaedeBackend.Exceptions;
 using KaedeBackend.Models.Profiles;
-using KaedeBackend.Models.Profiles.Attributes;
-using KaedeBackend.Models.Profiles.Other;
+using KaedeBackend.Models.Profiles.Changes;
 using KaedeBackend.Models.Requests;
 using KaedeBackend.Models.Responses;
 using KaedeBackend.Services;
 using KaedeBackend.Utils;
 using Microsoft.AspNetCore.Mvc;
-using MongoDB.Bson;
 using MongoDB.Driver;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using static KaedeBackend.Utils.Globals;
 
 namespace KaedeBackend.Controllers
@@ -26,6 +20,8 @@ namespace KaedeBackend.Controllers
         public McpController(IMongoService mongoService)
         {
             _mongoService = mongoService;
+
+            TokenVerify.Verify(HttpContext);
         }
 
         [HttpPost]
@@ -35,10 +31,9 @@ namespace KaedeBackend.Controllers
         [Route("{accountId}/client/BulkEquipBattleRoyaleCustomization")]
         public async Task<ActionResult<ProfileResponse>> QueryProfile([FromQuery] string profileId, [FromQuery] int rvn, string accountId)
         {
-            //TokenVerify.Verify(HttpContext);
-
-            var ApplyProfileChanges = new List<object>();
-            var BaseRevision = 0;
+            var applyProfileChanges = new List<object>();
+            var baseRevision = 0;
+            var memory = GetSeasonData(HttpContext);
 
             var profiles = await _mongoService.GetFortniteProfileById(accountId);
 
@@ -47,23 +42,25 @@ namespace KaedeBackend.Controllers
                 case "athena":
                     {
                         var athenaProfile = profiles.AthenaProfile;
-                        BaseRevision = athenaProfile.Revision;
-                        ApplyProfileChanges.Add(JObject.FromObject(new
+                        baseRevision = athenaProfile.Revision;
+                        if (profileId == "athena") athenaProfile.Stats.Attributes.SeasonNum = memory.Season;
+                        await _mongoService.UpdateAthenaProfile(accountId, athenaProfile);
+                        applyProfileChanges.Add(new FullProfileUpdate
                         {
-                            profile = athenaProfile,
-                            changeType = "fullProfileUpdate"
-                        }));
+                            ChangeType = "fullProfileUpdate",
+                            Profile = athenaProfile
+                        });
                         break;
                     }
                 case "common_core":
                     {
                         var commonCoreProfile = profiles.CommonCoreProfile;
-                        BaseRevision = commonCoreProfile.Revision;
-                        ApplyProfileChanges.Add(JObject.FromObject(new
+                        baseRevision = commonCoreProfile.Revision;
+                        applyProfileChanges.Add(new FullProfileUpdate
                         {
-                            profile = commonCoreProfile,
-                            changeType = "fullProfileUpdate"
-                        }));
+                            ChangeType = "fullProfileUpdate",
+                            Profile = commonCoreProfile
+                        });
                         break;
                     }
                 case "common_public":
@@ -81,23 +78,23 @@ namespace KaedeBackend.Controllers
                             Revision = 0,
                             WipeNumber = 1
                         };
-                        BaseRevision = common_PublicProfile.Revision;
-                        ApplyProfileChanges.Add(JObject.FromObject(new
+                        baseRevision = common_PublicProfile.Revision;
+                        applyProfileChanges.Add(new FullProfileUpdate
                         {
-                            profile = common_PublicProfile,
-                            changeType = "fullProfileUpdate"
-                        }));
+                            ChangeType = "fullProfileUpdate",
+                            Profile = common_PublicProfile
+                        });
                         break;
                     }
             }
 
             var reponse = new ProfileResponse
             {
-                ProfileRevision = BaseRevision,
+                ProfileRevision = baseRevision,
                 ProfileId = profileId,
-                ProfileprofileChangesBaseRevisionRevision = BaseRevision,
-                ProfileChanges = ApplyProfileChanges,
-                ProfileCommandRevision = BaseRevision,
+                ProfileChangesBaseRevisionRevision = baseRevision,
+                ProfileChanges = applyProfileChanges,
+                ProfileCommandRevision = baseRevision,
                 ServerTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ"),
                 ResponseVersion = 1
             };
@@ -110,92 +107,109 @@ namespace KaedeBackend.Controllers
         public async Task<ActionResult<ProfileResponse>> EquipBattleRoyaleCustomization([FromQuery] string profileId, [FromQuery] int rvn,
             [FromBody] EquipBattleRoyaleCustomizationRequest body, string accountId)
         {
-            //TokenVerify.Verify(HttpContext);
+            var profiles = await _mongoService.GetFortniteProfileById(accountId);
 
-            var Profiles = await _mongoService.GetFortniteProfileById(accountId);
-
-            if (Profiles is null)
+            if (profiles is null)
                 throw new BaseException("errors.com.epicgames.modules.profiles.operation_forbidden", $"Unable to find template configuration for profile {profileId}", 10282, "");
 
             if (profileId != "athena")
                 throw new BaseException("errors.com.epicgames.modules.profiles.invalid_command", $"EquipBattleRoyaleCustomization is not valid on {profileId} profile", 10282, "");
 
-            var ProfileAthena = Profiles.AthenaProfile;
+            var profileAthena = profiles.AthenaProfile;
 
             var memory = GetSeasonData(HttpContext);
 
-            if (profileId == "athena") ProfileAthena.Stats.Attributes.SeasonNum = memory.Season;
-
-            var ApplyProfileChanges = new List<object>();
-            var BaseRevision = ProfileAthena.Revision;
-            var ProfileRevisionCheck = (memory.Build >= 12.20) ? ProfileAthena.CommandRevision : ProfileAthena.Revision;
-            var QueryRevision = rvn;
+            var applyProfileChanges = new List<object>();
+            var baseRevision = profileAthena.Revision;
+            var profileRevisionCheck = (memory.Build >= 12.20) ? profileAthena.CommandRevision : profileAthena.Revision;
 
             switch (body.SlotName)
             {
                 case "Character":
-                    ProfileAthena.Stats.Attributes.FavoriteCharacter = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoriteCharacter = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoriteCharacter);
                     break;
                 case "Backpack":
-                    ProfileAthena.Stats.Attributes.FavoriteBackpack = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoriteBackpack = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoriteBackpack);
                     break;
                 case "Pickaxe":
-                    ProfileAthena.Stats.Attributes.FavoritePickaxe = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoritePickaxe = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoritePickaxe);
                     break;
                 case "SkyDiveContrail":
-                    ProfileAthena.Stats.Attributes.FavoriteSkyDiveContrail = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoriteSkyDiveContrail = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoriteSkyDiveContrail);
                     break;
                 case "Glider":
-                    ProfileAthena.Stats.Attributes.FavoriteGlider = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoriteGlider = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoriteGlider);
                     break;
                 case "MusicPack":
-                    ProfileAthena.Stats.Attributes.FavoriteMusicPack = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoriteMusicPack = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoriteMusicPack);
                     break;
                 case "LoadingScreen":
-                    ProfileAthena.Stats.Attributes.FavoriteLoadingScreen = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoriteLoadingScreen = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoriteLoadingScreen);
                     break;
                 case "Dance":
-                    ProfileAthena.Stats.Attributes.FavoriteDance[body.IndexWithinSlot] = body.ItemToSlot;
+                    profileAthena.Stats.Attributes.FavoriteDance[body.IndexWithinSlot] = body.ItemToSlot;
+                    AddChanges(profileAthena.Stats.Attributes.FavoriteDance);
                     break;
                 case "ItemWrap":
                     {
                         if (body.IndexWithinSlot >= 0 && body.IndexWithinSlot <= 7)
-                            ProfileAthena.Stats.Attributes.FavoriteItemWraps[body.IndexWithinSlot] = body.ItemToSlot;
+                            profileAthena.Stats.Attributes.FavoriteItemWraps[body.IndexWithinSlot] = body.ItemToSlot;
                         else if (body.IndexWithinSlot == -1)
                             for (int i = 0; i < 7; i++)
-                                ProfileAthena.Stats.Attributes.FavoriteItemWraps[i] = body.ItemToSlot;
+                                profileAthena.Stats.Attributes.FavoriteItemWraps[i] = body.ItemToSlot;
+
+                        AddChanges(profileAthena.Stats.Attributes.FavoriteItemWraps);
                         break;
                     }
                 default:
                     throw new BaseException("epic.games.slotname.not.found", $"The slot name ({body.SlotName}) cant be found!", 10893, "");
             }
-
-            ApplyProfileChanges.Add(JObject.FromObject(new
+            
+            void AddChanges(object obj)
             {
-                changeType = "statModified",
-                name = $"favorite_{body.SlotName.ToLower()}",
-                value = body.ItemToSlot
-            }));
+                applyProfileChanges.Add(new StatModified
+                {
+                    ChangeType = "statModified",
+                    Name = $"favorite_{body.SlotName.ToLower()}",
+                    Value = obj
+                });
+            }
 
-            if (ApplyProfileChanges.Count > 0)
+            if (applyProfileChanges.Count > 0)
             {
-                ProfileAthena.Revision += 1;
-                ProfileAthena.CommandRevision += 1;
-                ProfileAthena.Updated = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ");
+                profileAthena.Revision += 1;
+                profileAthena.CommandRevision += 1;
+                profileAthena.Updated = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ");
 
+                await _mongoService.UpdateAthenaProfile(accountId, profileAthena);
+            }
 
-                var filter = Builders<ProfilesMongo>.Filter.Eq("accountId", accountId);
-                var update = Builders<ProfilesMongo>.Update.Set("athena", ProfileAthena);
-                await _mongoService.UpdateFortniteProfile(filter, update);
+            if (rvn != profileRevisionCheck)
+            {
+                applyProfileChanges = new List<object>
+                { 
+                    new FullProfileUpdate
+                    {
+                        ChangeType = "fullProfileUpdate",
+                        Profile = profileAthena
+                    }
+                };
             }
 
             return new ProfileResponse
             {
-                ProfileRevision = ProfileAthena.Revision,
+                ProfileRevision = profileAthena.Revision,
                 ProfileId = profileId,
-                ProfileCommandRevision = BaseRevision,
-                ProfileChanges = ApplyProfileChanges,
-                ProfileprofileChangesBaseRevisionRevision = ProfileAthena.CommandRevision,
+                ProfileCommandRevision = profileAthena.CommandRevision,
+                ProfileChanges = applyProfileChanges,
+                ProfileChangesBaseRevisionRevision = baseRevision,
                 ServerTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ"),
                 ResponseVersion = 1
             };
@@ -206,64 +220,66 @@ namespace KaedeBackend.Controllers
         public async Task<ActionResult<ProfileResponse>> MarkItemSeen([FromQuery] string profileId, [FromQuery] int rvn,
             [FromBody] MarkItemSeenRequest body, string accountId)
         {
-            var Profiles = await _mongoService.GetFortniteProfileById(accountId);
-
-            if (Profiles is null)
+            var profiles = await _mongoService.GetFortniteProfileById(accountId);
+            if (profiles is null)
                 throw new BaseException("errors.com.epicgames.modules.profiles.operation_forbidden", $"Unable to find template configuration for profile {profileId}", 10282, "");
 
             if (profileId != "athena")
                 throw new BaseException("errors.com.epicgames.modules.profiles.invalid_command", $"EquipBattleRoyaleCustomization is not valid on {profileId} profile", 10282, "");
 
-            var ProfileAthena = Profiles.AthenaProfile;
+            var profileAthena = profiles.AthenaProfile;
 
             var memory = GetSeasonData(HttpContext);
 
-            if (profileId == "athena") ProfileAthena.Stats.Attributes.SeasonNum = memory.Season;
-
-            var ApplyProfileChanges = new List<object>();
-            var BaseRevision = ProfileAthena.Revision;
+            var applyProfileChanges = new List<object>();
+            var BaseRevision = profileAthena.Revision;
+            var profileRevisionCheck = (memory.Build >= 12.20) ? profileAthena.CommandRevision : profileAthena.Revision;
 
             for (int i = 0; i < body.ItemIds.Count(); i++)
             {
                 var item = body.ItemIds[i];
-                var itemchanged = JObject.FromObject(ProfileAthena.Items.FirstOrDefault(x => x.Key == item).Value.Attributes).ToObject<ItemAttributes>();
-                itemchanged.ItemSeen = true;
-                ProfileAthena.Items.FirstOrDefault(x => x.Key == item).Value.Attributes = itemchanged;
 
-                ApplyProfileChanges.Add(JObject.FromObject(new
+                profileAthena.Items.FirstOrDefault(x => x.Key == item).Value.Attributes.ItemSeen = true;
+
+                applyProfileChanges.Add(new ItemAttrChanged
                 {
-                    changeType = "itemAttrChanged",
-                    itemId = item,
-                    attributeName = "item_seen"
-                }));
+                    ChangeType = "itemAttrChanged",
+                    ItemId = item,
+                    AttributeName = "item_seen",
+                    AttributeValue = true
+                });
             }
 
-            if (ApplyProfileChanges.Count > 0)
+            if (applyProfileChanges.Count > 0)
             {
-                ProfileAthena.Revision += 1;
-                ProfileAthena.CommandRevision += 1;
-                ProfileAthena.Updated = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ");
+                profileAthena.Revision += 1;
+                profileAthena.CommandRevision += 1;
+                profileAthena.Updated = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ");
 
                 var filter = Builders<ProfilesMongo>.Filter.Eq("accountId", accountId);
-                var update = Builders<ProfilesMongo>.Update.Set("athena", ProfileAthena);
+                var update = Builders<ProfilesMongo>.Update.Set("athena", profileAthena);
                 await _mongoService.UpdateFortniteProfile(filter, update);
             }
 
-            ApplyProfileChanges = new List<object>();
-
-            ApplyProfileChanges.Add(JObject.FromObject(new
+            if (rvn != profileRevisionCheck)
             {
-                changeType = "fullProfileUpdate",
-                profile = ProfileAthena,
-            }));
+                applyProfileChanges = new List<object>
+                {
+                    new FullProfileUpdate
+                    {
+                        ChangeType = "fullProfileUpdate",
+                        Profile = profileAthena
+                    }
+                };
+            }
 
             return new ProfileResponse
             {
-                ProfileRevision = ProfileAthena.Revision,
+                ProfileRevision = profileAthena.Revision,
                 ProfileId = profileId,
-                ProfileCommandRevision = BaseRevision,
-                ProfileChanges = ApplyProfileChanges,
-                ProfileprofileChangesBaseRevisionRevision = ProfileAthena.CommandRevision,
+                ProfileCommandRevision = profileAthena.CommandRevision,
+                ProfileChanges = applyProfileChanges,
+                ProfileChangesBaseRevisionRevision = BaseRevision,
                 ServerTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ"),
                 ResponseVersion = 1
             };

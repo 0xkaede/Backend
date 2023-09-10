@@ -4,37 +4,37 @@ namespace KaedeBackend.Models.Profiles.Attributes
 {
     public class ItemAttributes //skunky bozo
     {
-        [BsonElement("locker_slots_data")]
+        [BsonElement("locker_slots_data"), BsonIgnoreIfNull()]
         public LockerSlotsData LockerSlotsData { get; set; }
 
-        [BsonElement("use_count")]
+        [BsonElement("use_count"), BsonIgnoreIfNull()]
         public int UseCount { get; set; }
 
-        [BsonElement("banner_icon_template")]
+        [BsonElement("banner_icon_template"), BsonIgnoreIfNull()]
         public string BannerIconTemplate { get; set; }
 
-        [BsonElement("banner_color_template")]
+        [BsonElement("banner_color_template"), BsonIgnoreIfNull()]
         public string BannerColorTemplate { get; set; }
 
-        [BsonElement("locker_name")]
+        [BsonElement("locker_name"), BsonIgnoreIfNull()]
         public string LockerName { get; set; }
 
-        [BsonElement("variants")]
+        [BsonElement("variants"), BsonIgnoreIfNull()]
         public List<Variant> Variants { get; set; }
 
-        [BsonElement("max_level_bonus")]
+        [BsonElement("max_level_bonus"), BsonIgnoreIfNull()]
         public int MaxLevelBonus { get; set; }
 
-        [BsonElement("level")]
+        [BsonElement("level"), BsonIgnoreIfNull()]
         public int Level { get; set; }
 
-        [BsonElement("item_seen")]
+        [BsonElement("item_seen"), BsonIgnoreIfNull()]
         public bool ItemSeen { get; set; }
 
-        [BsonElement("xp")]
+        [BsonElement("xp"), BsonIgnoreIfNull()]
         public int XP { get; set; }
 
-        [BsonElement("favorite")]
+        [BsonElement("favorite"), BsonIgnoreIfNull()]
         public bool Favorite { get; set; }
     }
 

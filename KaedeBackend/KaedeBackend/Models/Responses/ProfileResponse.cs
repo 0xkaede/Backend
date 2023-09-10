@@ -11,7 +11,7 @@ namespace KaedeBackend.Models.Responses
         public string ProfileId { get; set; }
 
         [JsonProperty("profileChangesBaseRevision")]
-        public int ProfileprofileChangesBaseRevisionRevision { get; set; }
+        public int ProfileChangesBaseRevisionRevision { get; set; }
 
         [JsonProperty("profileChanges")]
         public List<object> ProfileChanges { get; set; }

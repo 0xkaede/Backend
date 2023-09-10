@@ -81,7 +81,7 @@ namespace KaedeBackend.Models.Profiles
         [BsonElement("favorite_loadingscreen"), JsonProperty("favorite_loadingscreen")]
         public string FavoriteLoadingScreen { get; set; }
 
-        [BsonElement("favorite_musicpack"), JsonProperty("favorite_loadingscreen")]
+        [BsonElement("favorite_musicpack"), JsonProperty("favorite_musicpack")]
         public string FavoriteMusicPack { get; set; }
 
         [BsonElement("use_random_loadouts")]

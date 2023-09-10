@@ -1,5 +1,6 @@
 ﻿using KaedeBackend.Exceptions;
 using KaedeBackend.Exceptions.Common;
+using KaedeBackend.Models.Other;
 using KaedeBackend.Models.Profiles;
 using KaedeBackend.Models.Profiles.Attributes;
 using KaedeBackend.Models.Profiles.Other;
@@ -11,6 +12,8 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System;
+using System.Runtime.CompilerServices;
 using static KaedeBackend.Utils.Globals;
 
 namespace KaedeBackend.Services
@@ -32,6 +35,7 @@ namespace KaedeBackend.Services
         public Task<ProfilesMongo> GetFortniteProfileById(string accountId);
 
         public Task UpdateFortniteProfile(FilterDefinition<ProfilesMongo> filter, UpdateDefinition<ProfilesMongo> update);
+        public Task UpdateAthenaProfile(string accountId, AthenaProfile profile);
     }
 
     public class MongoService : IMongoService
@@ -53,15 +57,13 @@ namespace KaedeBackend.Services
 
         public void Ping()
         {
-            Logger.Log("Database Is Online");
-
-            CreateAccount("kaede", "kaede@fn.dev", "kaede1234", "1938918931");
         }
 
         public async Task InitDatabase()
         {
-            var filter = Builders<AthenaItem>.Filter.Eq("accountId", "9d0e3c69ce7a44dbb43c0a75a4682584");
-            var update = Builders<AthenaItem>.Update.Set("items", "");
+            Logger.Log("Database Is Online");
+            CreateAccount("kaede", "kaede@fn.dev", "kaede1234", "1938918931");
+            //FullLocker("cb016e60448c4e9fbe3276a05bfdafcf");
         }
 
         public async Task<List<UserProfile>> GetAllUserProfiles()
@@ -96,6 +98,14 @@ namespace KaedeBackend.Services
 
         public async Task UpdateFortniteProfile(FilterDefinition<ProfilesMongo> filter, UpdateDefinition<ProfilesMongo> update)
             => await _fortniteProfiles.UpdateOneAsync(filter, update);
+
+        public async Task UpdateAthenaProfile(string accountId, AthenaProfile profile)
+        {
+            var filter = Builders<ProfilesMongo>.Filter.Eq("accountId", accountId);
+            var update = Builders<ProfilesMongo>.Update.Set("athena", profile);
+            await UpdateFortniteProfile(filter, update);
+        }
+            
 
         public async Task UpdateUser(FilterDefinition<UserProfile> filter, UpdateDefinition<UserProfile> update)
             => await _userProfiles.UpdateOneAsync(filter, update);
@@ -195,7 +205,7 @@ namespace KaedeBackend.Services
                             Level = 0,
                             XP = 0,
                             Favorite = false,
-                            Variants = new List<Variant>(),
+                            Variants = new List<Models.Profiles.Attributes.Variant>(),
                             MaxLevelBonus = 0,
                         }
                     });
@@ -327,6 +337,39 @@ namespace KaedeBackend.Services
                 throw new InvalidCredentialsException();
 
             return user;
+        }
+
+        public async Task FullLocker(string id)
+        {
+            var profiles = await GetFortniteProfileById(id);
+
+            var athena = profiles.AthenaProfile;
+
+            var items = JsonConvert.DeserializeObject<FortniteAPIResponse<List<Cosmetic>>>(await new HttpClient().GetStringAsync("https://fortnite-api.com/v2/cosmetics/br")).Data;
+
+            athena.Items = new Dictionary<string, ProfileItem>();
+
+            foreach (var item in items)
+            {
+                if (item.Id.ToLower().Contains("random")) continue;
+
+                athena.Items.Add($"{item.Type.BackendValue}:{item.Id}", new ProfileItem
+                {
+                    TemplateId = $"{item.Type.BackendValue}:{item.Id}",
+                    Quantity = 1,
+                    Attributes = new ItemAttributes
+                    {
+                        ItemSeen = true,
+                        Favorite = false,
+                        Variants = new List<Models.Profiles.Attributes.Variant>()
+                    }
+                });
+            }
+
+            var filter = Builders<ProfilesMongo>.Filter.Eq("accountId", id);
+            var update = Builders<ProfilesMongo>.Update.Set("athena", athena);
+            await UpdateFortniteProfile(filter, update);
+            Logger.Log("Full Locker granted");
         }
     }
 }
