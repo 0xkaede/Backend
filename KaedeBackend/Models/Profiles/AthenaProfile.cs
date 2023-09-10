@@ -1,10 +1,7 @@
 ﻿using KaedeBackend.Models.Profiles.Attributes;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
-using MongoDB.Bson.Serialization.Options;
-using MongoDB.Bson.Serialization.Serializers;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace KaedeBackend.Models.Profiles
 {

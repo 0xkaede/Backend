@@ -285,5 +285,74 @@ namespace KaedeBackend.Controllers
             };
         }
 
+        [HttpPost]
+        [Route("{accountId}/client/SetItemFavoriteStatusBatch")]
+        public async Task<ActionResult<ProfileResponse>> SetItemFavoriteStatusBatch([FromQuery] string profileId, [FromQuery] int rvn,
+            [FromBody] SetItemFavoriteStatusBatchRequest body, string accountId)
+        {
+            var profiles = await _mongoService.GetFortniteProfileById(accountId);
+            if (profiles is null)
+                throw new BaseException("errors.com.epicgames.modules.profiles.operation_forbidden", $"Unable to find template configuration for profile {profileId}", 10282, "");
+
+            if (profileId != "athena")
+                throw new BaseException("errors.com.epicgames.modules.profiles.invalid_command", $"EquipBattleRoyaleCustomization is not valid on {profileId} profile", 10282, "");
+
+            var profileAthena = profiles.AthenaProfile;
+
+            var memory = GetSeasonData(HttpContext);
+
+            var applyProfileChanges = new List<object>();
+            var BaseRevision = profileAthena.Revision;
+            var profileRevisionCheck = (memory.Build >= 12.20) ? profileAthena.CommandRevision : profileAthena.Revision;
+
+            for (int i = 0; i < body.ItemIds.Count(); i++)
+            {
+                var item = body.ItemIds[i];
+
+                profileAthena.Items.FirstOrDefault(x => x.Key == item).Value.Attributes.ItemSeen = body.ItemFavStatus[i];
+
+                applyProfileChanges.Add(new ItemAttrChanged
+                {
+                    ChangeType = "itemAttrChanged",
+                    ItemId = item,
+                    AttributeName = "favorite",
+                    AttributeValue = body.ItemFavStatus[i]
+                });
+            }
+
+            if (applyProfileChanges.Count > 0)
+            {
+                profileAthena.Revision += 1;
+                profileAthena.CommandRevision += 1;
+                profileAthena.Updated = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ");
+
+                var filter = Builders<ProfilesMongo>.Filter.Eq("accountId", accountId);
+                var update = Builders<ProfilesMongo>.Update.Set("athena", profileAthena);
+                await _mongoService.UpdateFortniteProfile(filter, update);
+            }
+
+            if (rvn != profileRevisionCheck)
+            {
+                applyProfileChanges = new List<object>
+                {
+                    new FullProfileUpdate
+                    {
+                        ChangeType = "fullProfileUpdate",
+                        Profile = profileAthena
+                    }
+                };
+            }
+
+            return new ProfileResponse
+            {
+                ProfileRevision = profileAthena.Revision,
+                ProfileId = profileId,
+                ProfileCommandRevision = profileAthena.CommandRevision,
+                ProfileChanges = applyProfileChanges,
+                ProfileChangesBaseRevisionRevision = BaseRevision,
+                ServerTime = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.sssZ"),
+                ResponseVersion = 1
+            };
+        }
     }
 }

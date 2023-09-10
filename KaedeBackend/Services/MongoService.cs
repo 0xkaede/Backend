@@ -221,9 +221,85 @@ namespace KaedeBackend.Services
                         {
                             Slots = new Dictionary<string, Slot>
                             {
-
+                                {
+                                    "Character", 
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "" },
+                                        ActiveVariants = new List<object> { }
+                                    }
+                                },
+                                {
+                                    "Backpack",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "" },
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                },
+                                {
+                                    "Pickaxe",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "" },
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                },
+                                {
+                                    "Dance",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "", "", "", "", "", ""},
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                },
+                                {
+                                    "Glider",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "" },
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                },
+                                {
+                                    "ItemWrap",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "", "", "", "", "", "", "" },
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                },
+                                {
+                                    "LoadingScreen",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "" },
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                },
+                                {
+                                    "MusicPack",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "" },
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                },
+                                {
+                                    "SkyDiveContrail",
+                                    new Slot
+                                    {
+                                        Items = new List<string> { "" },
+                                        ActiveVariants = new List<object>{ }
+                                    }
+                                }
                             }
-                        }
+                        },
+                        BannerColorTemplate = "",
+                        BannerIconTemplate = "",
+                        LockerName = "KAEDE",
+                        ItemSeen = false,
+                        Favorite = false
                     }
                 });
 
